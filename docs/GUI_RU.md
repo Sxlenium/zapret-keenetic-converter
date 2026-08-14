@@ -82,7 +82,7 @@ KeeneticZapret-converted/general-alt11-keenetic-20260813-123045/
 Проверьте интерфейс на роутере:
 
 ```sh
-ip route get 192.0.2.1
+ip route get 1.1.1.1
 ```
 
 Обычно нужно имя после `dev`. Возможные значения: `eth3`, `eth2.2`, `ppp0`,

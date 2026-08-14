@@ -30,7 +30,7 @@ class ConverterTest(unittest.TestCase):
         (source / "bin" / "tls.bin").write_bytes(b"tls")
         (source / "lists" / "list-general.txt").write_text("youtube.com\n", encoding="utf-8")
         (source / "lists" / "ipset-all.txt").write_text("203.0.113.113/32\n", encoding="utf-8")
-        (source / "lists" / "ipset-all.txt.backup").write_text("192.0.2.1/32\n", encoding="utf-8")
+        (source / "lists" / "ipset-all.txt.backup").write_text("1.1.1.1/32\n", encoding="utf-8")
         return source
 
     def test_parser_splits_profiles(self) -> None:
@@ -113,10 +113,10 @@ class ConverterTest(unittest.TestCase):
             )
             self.assertEqual(result.profiles_written, 3)
             self.assertIn("1024-65535", result.tcp_ports)
-            self.assertEqual((output / "lists" / "ipset-all.txt").read_text().strip(), "192.0.2.1/32")
+            self.assertEqual((output / "lists" / "ipset-all.txt").read_text().strip(), "1.1.1.1/32")
             self.assertEqual(
                 (output / "web-import" / "lists" / "ipset-all.list").read_text().strip(),
-                "192.0.2.1/32",
+                "1.1.1.1/32",
             )
 
     def test_current_ipset_mode_preserves_disabled_sentinel(self) -> None:

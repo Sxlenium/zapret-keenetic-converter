@@ -34,6 +34,7 @@ PATTERNS = {
     "credential-bearing URL": re.compile(r"https?://[^\s/:@]+:[^\s/@]+@", re.IGNORECASE),
 }
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+ALLOWED_PUBLIC_IPV4 = {ipaddress.ip_address("1.1.1.1")}
 BINARY_HOME_MARKERS = (
     b":\\users\\",
     b":/users/",
@@ -67,7 +68,7 @@ def scan(path: Path) -> list[str]:
             address = ipaddress.ip_address(match.group())
         except ValueError:
             continue
-        if address.is_global:
+        if address.is_global and address not in ALLOWED_PUBLIC_IPV4:
             findings.append(f"public IPv4 address: {address}")
     return findings
 
