@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zapret-keenetic-converter"
+version = "0.3.1"
+description = "Convert Flowseal zapret-discord-youtube winws profiles to nfqws2-keenetic/OpenWrt bundles"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "KeeneticZapret contributors"}]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.scripts]
+zapret-keenetic = "zapret_keenetic.cli:main"
+
+[project.gui-scripts]
+zapret-keenetic-gui = "zapret_keenetic.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["zapret_keenetic*"]

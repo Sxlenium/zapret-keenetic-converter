@@ -1,0 +1,80 @@
+name: Build release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          architecture: "x64"
+          cache: "pip"
+
+      - name: Install build dependency
+        run: python -m pip install "pyinstaller==6.22.0"
+
+      - name: Run tests
+        run: python -m unittest discover -v
+
+      - name: Verify Tk GUI runtime
+        run: python -c "import tkinter; root = tkinter.Tk(); root.withdraw(); root.destroy()"
+
+      - name: Audit source for personal data and secrets
+        run: python scripts/audit_release.py
+
+      - name: Build standalone GUI
+        run: >-
+          python -m PyInstaller
+          --noconfirm
+          --clean
+          --onefile
+          --windowed
+          --name ZapretKeeneticConverter
+          scripts/windows_entry.py
+
+      - name: Smoke-test executable
+        shell: pwsh
+        run: |
+          & .\dist\ZapretKeeneticConverter.exe --smoke-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build portable archive and checksums
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          if (-not $version -or $version -eq '${{ github.ref_name }}') { $version = 'development' }
+          python scripts/build_portable.py --exe .\dist\ZapretKeeneticConverter.exe --output .\release --version $version
+
+      - name: Audit release artifacts for host paths
+        run: python scripts/audit_release.py --artifacts .\release
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZapretKeeneticConverter-windows-x64
+          path: release/*
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem .\release\* | Select-Object -ExpandProperty FullName
+          gh release create "${{ github.ref_name }}" $assets `
+            --title "Zapret Keenetic Converter ${{ github.ref_name }}" `
+            --generate-notes

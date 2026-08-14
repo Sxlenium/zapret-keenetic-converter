@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+
+class HybridConfigError(RuntimeError):
+    """The stock or converted configuration cannot be merged safely."""
+
+
+@dataclass(frozen=True)
+class _Assignment:
+    start: int
+    end: int
+    value: str
+
+
+def _assignment(config: str, name: str) -> _Assignment:
+    match = re.search(rf"(?m)^{re.escape(name)}=", config)
+    if not match:
+        raise HybridConfigError(f"В конфигурации отсутствует параметр {name}")
+
+    value_start = match.end()
+    if value_start >= len(config):
+        return _Assignment(match.start(), value_start, "")
+
+    quote = config[value_start]
+    if quote not in {'"', "'"}:
+        line_end = config.find("\n", value_start)
+        if line_end < 0:
+            line_end = len(config)
+        return _Assignment(match.start(), line_end, config[value_start:line_end].strip())
+
+    cursor = value_start + 1
+    escaped = False
+    while cursor < len(config):
+        character = config[cursor]
+        if quote == '"' and escaped:
+            escaped = False
+        elif quote == '"' and character == "\\":
+            escaped = True
+        elif character == quote:
+            raw = config[value_start + 1 : cursor]
+            if quote == '"':
+                raw = re.sub(r"\\([\\\"$`])", r"\1", raw)
+            else:
+                raw = raw.replace("'\\''", "'")
+            return _Assignment(match.start(), cursor + 1, raw)
+        cursor += 1
+    raise HybridConfigError(f"Незакрытая строка параметра {name}")
+
+
+def _lines(value: str) -> list[str]:
+    return [line.strip() for line in value.splitlines() if line.strip()]
+
+
+def _config_value(lines: list[str], indent: int = 17) -> str:
+    if not lines:
+        return '""'
+    padding = " " * indent
+    escaped = [
+        line.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+        for line in lines
+    ]
+    return '"' + ("\n" + padding).join(escaped) + '"'
+
+
+def _replace(config: str, name: str, lines: list[str]) -> str:
+    current = _assignment(config, name)
+    replacement = f"{name}={_config_value(lines)}"
+    return config[: current.start] + replacement + config[current.end :]
+
+
+def _profiles(value: str) -> list[list[str]]:
+    result: list[list[str]] = []
+    current: list[str] = []
+    for line in _lines(value):
+        if line == "--new":
+            if current:
+                result.append(current)
+                current = []
+        else:
+            current.append(line)
+    if current:
+        result.append(current)
+    return result
+
+
+def _is_discord_profile(profile: list[str]) -> bool:
+    text = "\n".join(profile).lower()
+    return any(
+        marker in text
+        for marker in (
+            "/lists/list-general.",
+            "--filter-l7=discord,stun",
+            "--hostlist-domains=discord.media",
+        )
+    )
+
+
+def build_hybrid_keenetic_config(stock_config: str, converted_config: str) -> str:
+    """Merge Flowseal's Discord profiles with nfqws2's adaptive stock strategy.
+
+    Discord-specific profiles are placed in NFQWS_ARGS_CUSTOM, which the package
+    starts before its generic UDP/QUIC/TCP profiles. YouTube and other entries in
+    the package lists therefore keep using nfqws2's adaptive strategy.
+    """
+    stock_base = _lines(_assignment(stock_config, "NFQWS_BASE_ARGS").value)
+    converted_base = _lines(_assignment(converted_config, "NFQWS_BASE_ARGS").value)
+    inline_blobs = [line for line in converted_base if line.startswith("--blob=")]
+    known_blob_names = {line.split(":", 1)[0] for line in stock_base if line.startswith("--blob=")}
+    for declaration in inline_blobs:
+        if declaration.split(":", 1)[0] not in known_blob_names:
+            stock_base.append(declaration)
+
+    converted_profiles = _profiles(_assignment(converted_config, "NFQWS_ARGS_CUSTOM").value)
+    converted_profiles.append(_lines(_assignment(converted_config, "NFQWS_ARGS").value))
+    discord_profiles = [profile for profile in converted_profiles if _is_discord_profile(profile)]
+    if not discord_profiles:
+        raise HybridConfigError("В конвертированном профиле не найдены стратегии Discord")
+
+    custom: list[str] = []
+    for index, profile in enumerate(discord_profiles):
+        if index:
+            custom.append("--new")
+        custom.extend(profile)
+
+    ipset_args = _lines(_assignment(stock_config, "NFQWS_ARGS_IPSET").value)
+    ipset_all = "--ipset=/opt/etc/nfqws2/lists/ipset-all.list"
+    if ipset_all not in ipset_args:
+        insert_at = next((i for i, line in enumerate(ipset_args) if line.startswith("--ipset-exclude=")), len(ipset_args))
+        ipset_args.insert(insert_at, ipset_all)
+
+    result = stock_config
+    result = _replace(result, "NFQWS_BASE_ARGS", stock_base)
+    result = _replace(result, "NFQWS_ARGS_IPSET", ipset_args)
+    result = _replace(result, "NFQWS_ARGS_CUSTOM", custom)
+    header = (
+        "# Hybrid configuration generated by zapret-keenetic-converter.\n"
+        "# Discord: selected Flowseal profiles; YouTube: nfqws2 adaptive strategy.\n"
+    )
+    return header + result.lstrip("\ufeff")
