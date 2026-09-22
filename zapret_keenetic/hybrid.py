@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .compat import HOSTFAKESPLIT_INIT
+
 
 class HybridConfigError(RuntimeError):
     """The stock or converted configuration cannot be merged safely."""
@@ -112,6 +114,8 @@ def build_hybrid_keenetic_config(stock_config: str, converted_config: str) -> st
     for declaration in inline_blobs:
         if declaration.split(":", 1)[0] not in known_blob_names:
             stock_base.append(declaration)
+    if HOSTFAKESPLIT_INIT in converted_base and HOSTFAKESPLIT_INIT not in stock_base:
+        stock_base.append(HOSTFAKESPLIT_INIT)
 
     converted_profiles = _profiles(_assignment(converted_config, "NFQWS_ARGS_CUSTOM").value)
     converted_profiles.append(_lines(_assignment(converted_config, "NFQWS_ARGS").value))

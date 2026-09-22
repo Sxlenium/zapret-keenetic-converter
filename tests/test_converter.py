@@ -45,6 +45,10 @@ class ConverterTest(unittest.TestCase):
             root = Path(temp)
             source = self.make_source(root)
             (source / "helper.bat").write_text("@echo off\necho service helper\n", encoding="utf-8")
+            (source / "service.bat").write_text(
+                '@echo off\ntasklist | find "winws.exe"\ncurl --silent --output version.txt https://example.org\n',
+                encoding="utf-8",
+            )
             self.assertEqual(discover_profiles(source), ["general.bat"])
 
             moment = datetime(2026, 8, 13, 12, 30, 45)

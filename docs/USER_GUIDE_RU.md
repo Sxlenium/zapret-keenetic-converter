@@ -462,7 +462,7 @@ Get-Content -Encoding utf8 ".\converted\alt11-keenetic\REPORT.md"
 - `missing-list` — обязательный список не найден;
 - `missing-blob` — не найден бинарный fake-шаблон;
 - `unsupported-option`/`unsupported-mode` — параметр не переведён;
-- `hostfakesplit-altorder` — точного встроенного эквивалента zapret2 нет;
+- `hostfakesplit-altorder` — информационная запись: altorder=1 сохранён встроенной функцией совместимости;
 - `multiport-limit` — слишком много портов для одного правила `xt_multiport`.
 
 Не устанавливайте комплект с `missing-blob`, `unsupported-mode` или `multiport-limit`, пока не разберётесь с предупреждением.
@@ -790,7 +790,7 @@ Get-ChildItem "C:\Tools\zapret-discord-youtube" -Filter *.bat | Select-Object Na
 
 ### `hostfakesplit-altorder`
 
-В стандартной библиотеке zapret2 нет точного встроенного эквивалента `altorder=1`. Попробуйте другой рабочий профиль Flowseal либо примите обычный порядок только после практической проверки. `--strict` отклоняет такой результат.
+Начиная с 0.4.0rc1 порядок `altorder=1` сохраняется встроенной Lua-функцией совместимости. Это информационная запись; `--strict` её не отклоняет. Порядок первого теста: [TEST_1_10_3_RU.md](TEST_1_10_3_RU.md).
 
 ### Нужна проверка всех неоднозначностей
 

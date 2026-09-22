@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from .compat import HOSTFAKESPLIT_INIT
+
 
 class ConversionError(RuntimeError):
     """The source profile cannot be converted safely."""
@@ -50,6 +52,8 @@ class ConverterSettings:
     queue_num: int = 300
     strict: bool = False
     archive: bool = False
+    tls_fake_mode: str = "source"
+    fake_repeats_limit: int | None = None
 
 
 @dataclass
@@ -522,11 +526,27 @@ def _translate_profile(
                 ]
             if not specs:
                 specs = [("builtin", "known", None, "0x00")]
+            cloned_tls = False
             for source_option, payload, tls_mod, raw_blob in specs:
+                clone = payload == "tls_client_hello" and bundle.settings.tls_fake_mode == "clone"
+                if clone and cloned_tls:
+                    continue
                 _append_arg(result, "payload", payload)
-                blob = bundle.blob(raw_blob, profile_no, source_option)
+                if clone:
+                    cloned_tls = True
+                    blob = "zk_live_tls"
+                    _append_arg(result, "lua-desync", f"tls_client_hello_clone:blob={blob}")
+                    diagnostics.append(Diagnostic(
+                        "info", "experimental-tls-clone",
+                        "Эксперимент: TLS fake-шаблоны заменены одним живым ClientHello с rnd,rndsni,dupsid; "
+                        "это изменённая стратегия. HTTP/QUIC/seqovl-шаблоны сохранены.", profile_no,
+                    ))
+                else:
+                    blob = bundle.blob(raw_blob, profile_no, source_option)
                 args = [f"blob={blob}", *_common_lua_args(options, include_repeats=True)]
-                if payload == "tls_client_hello" and tls_mod and tls_mod != "none":
+                if clone:
+                    args.extend(("optional", "tls_mod=rnd,rndsni,dupsid"))
+                elif payload == "tls_client_hello" and tls_mod and tls_mod != "none":
                     args.append(f"tls_mod={tls_mod}")
                 _append_arg(result, "lua-desync", _lua("fake", args))
             continue
@@ -538,6 +558,9 @@ def _translate_profile(
 
         _append_arg(result, "payload", ",".join(inferred_payloads))
         common = _common_lua_args(options, include_repeats=mode in {"fakedsplit", "fakeddisorder", "hostfakesplit"})
+        if mode in {"multisplit", "multidisorder"}:
+            # nfqws1 applies fooling/repeats to fakes, not these real segments.
+            common = [arg for arg in common if arg.startswith("ip_id=") or arg == "tcp_ts_up"]
         split_pos = _last(options, "dpi-desync-split-pos")
         seqovl = _last(options, "dpi-desync-split-seqovl")
         seqovl_pattern = _last(options, "dpi-desync-split-seqovl-pattern")
@@ -554,30 +577,39 @@ def _translate_profile(
                 pattern = _last(options, "dpi-desync-fakedsplit-pattern")
                 if pattern:
                     args.append(f"pattern={bundle.blob(pattern, profile_no, 'dpi-desync-fakedsplit-pattern')}")
-            _append_arg(result, "lua-desync", _lua(mode, [*args, *common]))
+            function = "multidisorder_legacy" if mode == "multidisorder" else mode
+            _append_arg(result, "lua-desync", _lua(function, [*args, *common]))
         elif mode == "hostfakesplit":
             args = []
             mod = _last(options, "dpi-desync-hostfakesplit-mod", "") or ""
             altorder = False
             for component in mod.split(","):
+                component = component.strip()
                 if component.startswith("host="):
                     args.append(component)
                 elif component == "altorder=1":
                     altorder = True
+                elif component == "altorder=0":
+                    altorder = False
+                elif component and component != "none":
+                    raise ConversionError(
+                        f"Профиль {profile_no}: неподдерживаемый модификатор hostfakesplit {component}"
+                    )
             midhost = _last(options, "dpi-desync-hostfakesplit-midhost")
             if midhost:
                 args.append(f"midhost={midhost}")
             if altorder:
                 diagnostics.append(
                     Diagnostic(
-                        "warning",
+                        "info",
                         "hostfakesplit-altorder",
-                        "nfqws2 не имеет точного эквивалента hostfakesplit altorder=1; применён обычный порядок сегментов.",
+                        "altorder=1 сохранён встроенной Lua-функцией совместимости (zapret2 v1.0.5.2).",
                         profile_no,
                         "dpi-desync-hostfakesplit-mod",
                     )
                 )
-            _append_arg(result, "lua-desync", _lua("hostfakesplit", [*args, *common]))
+            function = "zk_hostfakesplit_alt1" if altorder else "hostfakesplit"
+            _append_arg(result, "lua-desync", _lua(function, [*args, *common]))
         else:
             diagnostics.append(
                 Diagnostic(
@@ -595,6 +627,20 @@ def _translate_profile(
             diagnostics.append(
                 Diagnostic("warning", "unsupported-option", f"Параметр --{item.name} пропущен", profile_no, item.name)
             )
+    limit = bundle.settings.fake_repeats_limit
+    if limit is not None:
+        limited = False
+        def cap_repeats(match: re.Match[str]) -> str:
+            nonlocal limited
+            count = int(match.group(1))
+            limited = limited or count > limit
+            return f":repeats={min(count, limit)}"
+        result = [re.sub(r":repeats=(\d+)(?=:|$)", cap_repeats, arg) for arg in result]
+        if limited:
+            diagnostics.append(Diagnostic(
+                "info", "experimental-repeat-limit",
+                f"Эксперимент: число повторов fake-пакетов ограничено до {limit}; стратегия изменена.", profile_no,
+            ))
     return ConvertedProfile(profile_no, result)
 
 
@@ -628,6 +674,8 @@ def _render_config(
         f"--lua-init=@{bundle.router_root}/lua/zapret-antidpi.lua",
         *bundle.blob_declarations(),
     ]
+    if any(arg.startswith("--lua-desync=zk_hostfakesplit_alt1") for profile in profiles for arg in profile.arguments):
+        base.append(HOSTFAKESPLIT_INIT)
     tcp = ",".join(port.replace("-", ":") for port in tcp_ports)
     udp = ",".join(port.replace("-", ":") for port in udp_ports)
     return f'''# Generated by zapret-keenetic-converter. Do not edit the generated file by hand.
@@ -772,6 +820,8 @@ def _render_report(
 - Записано профилей: {profiles_written}
 - TCP-порты: `{','.join(tcp_ports) or '(отключены)'}`
 - UDP-порты: `{','.join(udp_ports) or '(отключены)'}`
+- TLS fake: `{settings.tls_fake_mode}`; лимит повторов: `{settings.fake_repeats_limit or 'исходный'}`
+- Целевая совместимость: nfqws2-keenetic 1.2.8 / zapret2 v1.0.5.2; эффективность проверяется на роутере.
 
 ## Диагностика
 
@@ -808,6 +858,12 @@ def convert(settings: ConverterSettings) -> ConversionResult:
         raise ConversionError("game_filter должен быть disabled, all, tcp или udp")
     if settings.ipset_mode not in {"loaded", "current"}:
         raise ConversionError("ipset_mode должен быть loaded или current")
+    if settings.tls_fake_mode not in {"source", "clone"}:
+        raise ConversionError("tls_fake_mode должен быть source или clone")
+    if settings.fake_repeats_limit is not None and (
+        not isinstance(settings.fake_repeats_limit, int) or settings.fake_repeats_limit < 1
+    ):
+        raise ConversionError("fake_repeats_limit должен быть положительным целым числом")
     if not 0 <= settings.queue_num <= 65535:
         raise ConversionError("queue_num должен быть от 0 до 65535")
     if not settings.source.is_dir():
@@ -869,6 +925,8 @@ def convert(settings: ConverterSettings) -> ConversionResult:
         "target": settings.target,
         "profiles_read": len(raw_profiles),
         "profiles_written": len(converted),
+        "tls_fake_mode": settings.tls_fake_mode,
+        "fake_repeats_limit": settings.fake_repeats_limit,
         "tcp_ports": tcp_ports,
         "udp_ports": udp_ports,
         "diagnostics": [asdict(item) for item in diagnostics],

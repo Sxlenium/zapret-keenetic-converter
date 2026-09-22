@@ -40,12 +40,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--queue-num", type=int, default=300, help="номер NFQUEUE (по умолчанию: 300)")
     parser.add_argument("--strict", action="store_true", help="не создавать результат при предупреждениях")
     parser.add_argument("--archive", action="store_true", help="дополнительно создать ZIP рядом с каталогом")
+    parser.add_argument("--tls-fake-mode", choices=("source", "clone"), default="source",
+                        help="clone: экспериментальная замена TLS fake-шаблонов живым ClientHello")
+    parser.add_argument("--fake-repeats-limit", type=int,
+                        help="экспериментальный предел повторов fake-пакетов; меняет исходную стратегию")
     install = parser.add_argument_group("автоматическая установка на Keenetic")
     install.add_argument("--install", action="store_true", help="после конвертации установить результат через Web API")
     install.add_argument(
         "--install-mode",
         choices=("hybrid", "exact"),
-        default="hybrid",
+        default="exact",
         help="hybrid: Discord из Flowseal + адаптивный YouTube nfqws2; exact: весь выбранный профиль",
     )
     install.add_argument("--router-url", default="http://192.168.1.1:90/", help="адрес web-интерфейса nfqws2")
@@ -102,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
                 queue_num=args.queue_num,
                 strict=args.strict,
                 archive=args.archive,
+                tls_fake_mode=args.tls_fake_mode,
+                fake_repeats_limit=args.fake_repeats_limit,
             )
         )
     except (ConversionError, OSError) as error:

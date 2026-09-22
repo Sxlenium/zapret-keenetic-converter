@@ -4,7 +4,7 @@
 
 1. Откройте страницу [Releases](../../../releases/latest).
 2. В разделе **Assets** скачайте файл с именем вида
-   `ZapretKeeneticConverter-v0.3.1-windows-x64.zip`.
+   `ZapretKeeneticConverter-v0.4.0rc2-windows-x64.zip`.
 3. Распакуйте ZIP в обычную папку. Не запускайте программу прямо из окна архиватора.
 4. Дважды щёлкните `ZapretKeeneticConverter.exe`.
 5. Укажите каталог распакованного `zapret-discord-youtube`, выберите `.bat`-профиль
@@ -15,9 +15,8 @@
 `zapret-discord-youtube` в архив намеренно не включён: пользователь выбирает свою
 актуальную копию отдельно.
 
-Пока репозиторий закрытый, страница выпуска и файлы доступны только владельцу и
-приглашённым участникам. После перевода репозитория в публичный режим ссылки будут
-работать для всех без авторизации GitHub.
+Если на странице Releases ещё нет версии 0.4.0rc2, запустите программу из исходников
+по инструкции ниже. Готовый ZIP появляется там после публикации выпуска.
 
 ## Предупреждение Windows SmartScreen
 
@@ -31,7 +30,7 @@
 Рядом с архивом публикуется `SHA256SUMS.txt`. В PowerShell выполните:
 
 ```powershell
-Get-FileHash .\ZapretKeeneticConverter-v0.3.1-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\ZapretKeeneticConverter-v0.4.0rc2-windows-x64.zip -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 

@@ -38,8 +38,8 @@ IPSET_LABELS = {
     "Текущий ipset-all.txt без замены": "current",
 }
 INSTALL_MODE_LABELS = {
-    "Гибридный: Discord Flowseal + адаптивный YouTube (рекомендуется)": "hybrid",
     "Точный: полностью заменить конфиг выбранной стратегией": "exact",
+    "Гибридный: Discord Flowseal + адаптивный YouTube": "hybrid",
 }
 
 
@@ -55,7 +55,7 @@ def discover_profiles(source: Path) -> list[str]:
             _, parsed = parse_batch(candidate)
         except (ConversionError, OSError):
             continue
-        if parsed:
+        if any(option.name == "dpi-desync" and option.value for profile in parsed for option in profile):
             profiles.append(candidate.relative_to(source).as_posix())
     return sorted(profiles, key=lambda value: ("general" not in value.lower(), value.lower()))
 
@@ -86,8 +86,8 @@ class ConverterApp:
     def __init__(self, root: Tk):
         self.root = root
         self.root.title(f"Flowseal → nfqws2 — конвертер {__version__}")
-        self.root.geometry("980x900")
-        self.root.minsize(820, 760)
+        self.root.geometry("1060x780")
+        self.root.minsize(920, 650)
         self.root.option_add("*tearOff", False)
 
         self.source = StringVar()
@@ -102,6 +102,8 @@ class ConverterApp:
         self.policy_exclude = BooleanVar(value=False)
         self.queue_num = IntVar(value=300)
         self.strict = BooleanVar(value=False)
+        self.clone_tls = BooleanVar(value=False)
+        self.fake_repeats_limit = StringVar(value="0")
         self.archive = BooleanVar(value=False)
         self.install_after_convert = BooleanVar(value=False)
         self.install_mode_label = StringVar(value=next(iter(INSTALL_MODE_LABELS)))
@@ -119,178 +121,12 @@ class ConverterApp:
         self.target_label.trace_add("write", self._on_target_changed)
 
     def _configure_style(self) -> None:
-        style = ttk.Style(self.root)
-        for theme in ("vista", "clam"):
-            if theme in style.theme_names():
-                style.theme_use(theme)
-                break
-        style.configure("Title.TLabel", font=("Segoe UI", 18, "bold"))
-        style.configure("Subtitle.TLabel", font=("Segoe UI", 10), foreground="#526173")
-        style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
-        style.configure("Primary.TButton", font=("Segoe UI", 11, "bold"), padding=(18, 10))
-        style.configure("Status.TLabel", font=("Segoe UI", 10, "bold"))
+        from .gui_layout import configure_style
+        configure_style(self.root)
 
     def _build(self) -> None:
-        outer = ttk.Frame(self.root, padding=20)
-        outer.pack(fill="both", expand=True)
-        outer.columnconfigure(0, weight=1)
-        outer.rowconfigure(5, weight=1)
-
-        ttk.Label(outer, text="Конвертер стратегий Flowseal", style="Title.TLabel").grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(
-            outer,
-            text="Выберите профиль, настройте роутер и получите обычный комплект и web-import.",
-            style="Subtitle.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(2, 16))
-
-        files = ttk.LabelFrame(outer, text=" 1. Исходные файлы ", style="Section.TLabelframe")
-        files.grid(row=2, column=0, sticky="ew", pady=(0, 12))
-        files.columnconfigure(1, weight=1)
-
-        ttk.Label(files, text="Папка Flowseal").grid(row=0, column=0, sticky="w", padx=12, pady=(12, 6))
-        ttk.Entry(files, textvariable=self.source).grid(row=0, column=1, sticky="ew", padx=8, pady=(12, 6))
-        ttk.Button(files, text="Обзор…", command=self._choose_source).grid(
-            row=0, column=2, sticky="ew", padx=(0, 12), pady=(12, 6)
-        )
-
-        ttk.Label(files, text="Стратегия").grid(row=1, column=0, sticky="w", padx=12, pady=6)
-        self.profile_box = ttk.Combobox(files, textvariable=self.profile, state="readonly")
-        self.profile_box.grid(row=1, column=1, sticky="ew", padx=8, pady=6)
-        self.profile_box.bind("<<ComboboxSelected>>", self._on_profile_changed)
-        ttk.Button(files, text="Обновить", command=self._scan_profiles).grid(
-            row=1, column=2, sticky="ew", padx=(0, 12), pady=6
-        )
-
-        ttk.Label(files, text="Папка результата").grid(row=2, column=0, sticky="w", padx=12, pady=(6, 12))
-        ttk.Entry(files, textvariable=self.output).grid(row=2, column=1, sticky="ew", padx=8, pady=(6, 12))
-        ttk.Button(files, text="Изменить…", command=self._choose_output).grid(
-            row=2, column=2, sticky="ew", padx=(0, 12), pady=(6, 12)
-        )
-
-        settings = ttk.LabelFrame(outer, text=" 2. Параметры роутера ", style="Section.TLabelframe")
-        settings.grid(row=3, column=0, sticky="ew", pady=(0, 12))
-        for column in (1, 3):
-            settings.columnconfigure(column, weight=1)
-
-        ttk.Label(settings, text="Платформа").grid(row=0, column=0, sticky="w", padx=(12, 8), pady=(12, 6))
-        ttk.Combobox(
-            settings, textvariable=self.target_label, values=list(TARGET_LABELS), state="readonly"
-        ).grid(row=0, column=1, sticky="ew", padx=(0, 18), pady=(12, 6))
-        ttk.Label(settings, text="WAN-интерфейс").grid(row=0, column=2, sticky="w", padx=(0, 8), pady=(12, 6))
-        ttk.Combobox(
-            settings,
-            textvariable=self.interface,
-            values=("eth3", "eth2.2", "ppp0", "pppoe-wan"),
-        ).grid(row=0, column=3, sticky="ew", padx=(0, 12), pady=(12, 6))
-
-        ttk.Label(settings, text="Игровые порты").grid(row=1, column=0, sticky="w", padx=(12, 8), pady=6)
-        ttk.Combobox(
-            settings,
-            textvariable=self.game_filter_label,
-            values=list(GAME_FILTER_LABELS),
-            state="readonly",
-        ).grid(row=1, column=1, sticky="ew", padx=(0, 18), pady=6)
-        ttk.Label(settings, text="Режим IPSET").grid(row=1, column=2, sticky="w", padx=(0, 8), pady=6)
-        ttk.Combobox(
-            settings,
-            textvariable=self.ipset_label,
-            values=list(IPSET_LABELS),
-            state="readonly",
-        ).grid(row=1, column=3, sticky="ew", padx=(0, 12), pady=6)
-
-        ttk.Label(settings, text="Политика Keenetic").grid(row=2, column=0, sticky="w", padx=(12, 8), pady=6)
-        self.policy_entry = ttk.Entry(settings, textvariable=self.policy_name)
-        self.policy_entry.grid(row=2, column=1, sticky="ew", padx=(0, 18), pady=6)
-        ttk.Label(settings, text="Номер NFQUEUE").grid(row=2, column=2, sticky="w", padx=(0, 8), pady=6)
-        ttk.Spinbox(settings, from_=0, to=65535, textvariable=self.queue_num).grid(
-            row=2, column=3, sticky="ew", padx=(0, 12), pady=6
-        )
-
-        switches = ttk.Frame(settings)
-        switches.grid(row=3, column=0, columnspan=4, sticky="ew", padx=8, pady=(6, 12))
-        ttk.Checkbutton(switches, text="Обрабатывать IPv6", variable=self.ipv6).pack(side="left", padx=4)
-        self.policy_exclude_button = ttk.Checkbutton(
-            switches, text="Исключать устройства политики", variable=self.policy_exclude
-        )
-        self.policy_exclude_button.pack(side="left", padx=12)
-        ttk.Checkbutton(switches, text="Строгий режим", variable=self.strict).pack(side="left", padx=12)
-        ttk.Checkbutton(switches, text="Создать ZIP", variable=self.archive).pack(side="left", padx=12)
-
-        installation = ttk.LabelFrame(
-            outer, text=" 3. Автоматическая установка на Keenetic ", style="Section.TLabelframe"
-        )
-        installation.grid(row=4, column=0, sticky="ew", pady=(0, 12))
-        for column in (1, 3):
-            installation.columnconfigure(column, weight=1)
-        ttk.Checkbutton(
-            installation,
-            text="После конвертации установить через Web API nfqws2",
-            variable=self.install_after_convert,
-            command=self._on_install_changed,
-        ).grid(row=0, column=0, columnspan=4, sticky="w", padx=12, pady=(10, 6))
-        ttk.Label(installation, text="Режим").grid(row=1, column=0, sticky="w", padx=(12, 8), pady=6)
-        self.install_mode_box = ttk.Combobox(
-            installation,
-            textvariable=self.install_mode_label,
-            values=list(INSTALL_MODE_LABELS),
-            state="disabled",
-        )
-        self.install_mode_box.grid(row=1, column=1, columnspan=3, sticky="ew", padx=(0, 12), pady=6)
-        ttk.Label(installation, text="Адрес nfqws2").grid(row=2, column=0, sticky="w", padx=(12, 8), pady=6)
-        self.router_url_entry = ttk.Entry(installation, textvariable=self.router_url, state="disabled")
-        self.router_url_entry.grid(row=2, column=1, sticky="ew", padx=(0, 18), pady=6)
-        ttk.Label(installation, text="Пользователь").grid(row=2, column=2, sticky="w", padx=(0, 8), pady=6)
-        self.router_user_entry = ttk.Entry(installation, textvariable=self.router_user, state="disabled")
-        self.router_user_entry.grid(row=2, column=3, sticky="ew", padx=(0, 12), pady=6)
-        ttk.Label(installation, text="Пароль").grid(row=3, column=0, sticky="w", padx=(12, 8), pady=(6, 10))
-        self.router_password_entry = ttk.Entry(
-            installation, textvariable=self.router_password, show="•", state="disabled"
-        )
-        self.router_password_entry.grid(row=3, column=1, sticky="ew", padx=(0, 18), pady=(6, 10))
-        self.check_services_button = ttk.Checkbutton(
-            installation,
-            text="Проверить YouTube и Discord",
-            variable=self.check_services,
-            state="disabled",
-        )
-        self.check_services_button.grid(row=3, column=2, columnspan=2, sticky="w", pady=(6, 10))
-
-        result = ttk.LabelFrame(outer, text=" 4. Конвертация и установка ", style="Section.TLabelframe")
-        result.grid(row=5, column=0, sticky="nsew")
-        result.columnconfigure(0, weight=1)
-        result.rowconfigure(2, weight=1)
-
-        action_row = ttk.Frame(result)
-        action_row.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
-        action_row.columnconfigure(1, weight=1)
-        self.convert_button = ttk.Button(
-            action_row, text="Конвертировать", style="Primary.TButton", command=self._start_conversion
-        )
-        self.convert_button.grid(row=0, column=0, sticky="w")
-        ttk.Label(action_row, textvariable=self.status, style="Status.TLabel").grid(
-            row=0, column=1, sticky="w", padx=16
-        )
-        self.open_button = ttk.Button(action_row, text="Открыть результат", command=self._open_result, state="disabled")
-        self.open_button.grid(row=0, column=2, sticky="e")
-
-        self.progress = ttk.Progressbar(result, mode="indeterminate")
-        self.progress.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
-
-        self.log = Text(
-            result,
-            height=10,
-            wrap="word",
-            font=("Consolas", 9),
-            relief="flat",
-            borderwidth=1,
-            padx=10,
-            pady=8,
-            state="disabled",
-        )
-        self.log.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 12))
-
+        from .gui_layout import build
+        build(self, __version__, TARGET_LABELS, GAME_FILTER_LABELS, IPSET_LABELS, INSTALL_MODE_LABELS)
     def _choose_source(self) -> None:
         initial = self.source.get() or str(Path.home())
         selected = filedialog.askdirectory(title="Выберите папку zapret-discord-youtube", initialdir=initial)
@@ -347,6 +183,12 @@ class ConverterApp:
 
     def _on_install_changed(self) -> None:
         enabled = self.install_after_convert.get() and TARGET_LABELS[self.target_label.get()] == "keenetic"
+        self.install_check.configure(state="normal" if TARGET_LABELS[self.target_label.get()] == "keenetic" else "disabled")
+        if enabled:
+            self.auth_panel.pack(fill="x")
+        else:
+            self.auth_panel.pack_forget()
+        self.install_summary.configure(text="Автоматически после конвертации" if enabled else "Вручную через web-интерфейс")
         state = "readonly" if enabled else "disabled"
         self.install_mode_box.configure(state=state)
         entry_state = "normal" if enabled else "disabled"
@@ -393,6 +235,12 @@ class ConverterApp:
         target = TARGET_LABELS[self.target_label.get()]
         if target == "keenetic" and not policy_name:
             raise ConversionError("Укажите имя политики Keenetic")
+        try:
+            repeats_limit = int(self.fake_repeats_limit.get())
+        except ValueError as error:
+            raise ConversionError("Лимит повторов должен быть целым числом") from error
+        if repeats_limit < 0:
+            raise ConversionError("Лимит повторов не может быть отрицательным")
         return ConverterSettings(
             source=source,
             profile=profile,
@@ -407,6 +255,8 @@ class ConverterApp:
             queue_num=queue_num,
             strict=self.strict.get(),
             archive=self.archive.get(),
+            tls_fake_mode="clone" if self.clone_tls.get() else "source",
+            fake_repeats_limit=repeats_limit or None,
         )
 
     def _deployment_settings(self, conversion: ConverterSettings) -> DeploymentSettings | None:
@@ -492,6 +342,7 @@ class ConverterApp:
             self._conversion_failed(str(payload))
 
     def _conversion_failed(self, message: str) -> None:
+        self.tabs.select(self.journal_tab)
         self.progress.stop()
         self.convert_button.configure(state="normal")
         self.status.set("Ошибка конвертации")
@@ -502,6 +353,7 @@ class ConverterApp:
     def _conversion_finished(
         self, conversion: ConversionResult, deployment: DeploymentResult | None = None
     ) -> None:
+        self.tabs.select(self.journal_tab)
         self.progress.stop()
         self.convert_button.configure(state="normal")
         self.open_button.configure(state="normal")

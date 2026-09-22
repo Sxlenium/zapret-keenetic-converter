@@ -8,6 +8,15 @@ from scripts.audit_release import scan
 
 
 class PrivacyAuditTest(unittest.TestCase):
+    def test_allows_explicit_version_but_rejects_same_digits_as_address(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            example = Path(temporary) / "example.txt"
+            example.write_text("zapret2 v1.0.5.2\n", encoding="utf-8")
+            self.assertEqual(scan(example), [])
+            address = ".".join(["1", "0", "5", "2"])
+            example.write_text(address + "\n", encoding="utf-8")
+            self.assertEqual(scan(example), [f"public IPv4 address: {address}"])
+
     def test_allows_cloudflare_route_example(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             example = Path(temporary) / "example.txt"

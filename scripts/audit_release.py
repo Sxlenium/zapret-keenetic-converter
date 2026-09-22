@@ -33,7 +33,7 @@ PATTERNS = {
     "GitHub token": re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
     "credential-bearing URL": re.compile(r"https?://[^\s/:@]+:[^\s/@]+@", re.IGNORECASE),
 }
-IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+IPV4 = re.compile(r"(?<![vV\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 ALLOWED_PUBLIC_IPV4 = {ipaddress.ip_address("1.1.1.1")}
 BINARY_HOME_MARKERS = (
     b":\\users\\",
