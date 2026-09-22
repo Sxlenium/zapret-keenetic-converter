@@ -53,7 +53,7 @@ def main() -> int:
         shutil.copy2(ROOT / "README.md", staging / "README.md")
         shutil.copy2(ROOT / "LICENSE", staging / "LICENSE")
         shutil.copytree(ROOT / "docs", staging / "docs")
-        (staging / "НАЧНИТЕ_ЗДЕСЬ.txt").write_text(
+        (staging / "ИНСТРУКЦИЯ.txt").write_text(
             "Запустите ZapretKeeneticConverter.exe.\n"
             "Инструкция по скачиванию и первому запуску: docs/DOWNLOAD_RU.md\n"
             "Полное руководство: docs/USER_GUIDE_RU.md\n",

@@ -75,6 +75,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = Get-ChildItem .\release\* | Select-Object -ExpandProperty FullName
+          $releaseFlags = @()
+          if ("${{ github.ref_name }}" -match 'rc\d+$') { $releaseFlags += '--prerelease' }
           gh release create "${{ github.ref_name }}" $assets `
             --title "Zapret Keenetic Converter ${{ github.ref_name }}" `
-            --generate-notes
+            --generate-notes @releaseFlags
