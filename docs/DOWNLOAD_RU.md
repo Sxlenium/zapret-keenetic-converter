@@ -4,7 +4,7 @@
 
 1. Откройте страницу [Releases](../../../releases).
 2. В разделе **Assets** скачайте файл с именем вида
-   `ZapretKeeneticConverter-v0.4.0rc2-windows-x64.zip`.
+   `ZapretKeeneticConverter-v0.4.0rc3-windows-x64.zip`.
 3. Распакуйте ZIP в обычную папку. Не запускайте программу прямо из окна архиватора.
 4. Прочитайте `ИНСТРУКЦИЯ.txt` и дважды щёлкните `ZapretKeeneticConverter.exe`.
 5. Укажите каталог распакованного `zapret-discord-youtube`, выберите `.bat`-профиль
@@ -27,7 +27,7 @@
 Рядом с архивом публикуется `SHA256SUMS.txt`. В PowerShell выполните:
 
 ```powershell
-Get-FileHash .\ZapretKeeneticConverter-v0.4.0rc2-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\ZapretKeeneticConverter-v0.4.0rc3-windows-x64.zip -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 

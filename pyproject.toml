@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zapret-keenetic-converter"
-version = "0.4.0rc2"
+version = "0.4.0rc3"
 description = "Convert Flowseal zapret-discord-youtube winws profiles to nfqws2-keenetic/OpenWrt bundles"
 readme = "README.md"
 requires-python = ">=3.9"
