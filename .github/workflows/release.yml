@@ -74,9 +74,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          $notesPath = "docs/RELEASE_NOTES_${version}_RU.md"
           $assets = Get-ChildItem .\release\* | Select-Object -ExpandProperty FullName
           $releaseFlags = @()
-          if ("${{ github.ref_name }}" -match 'rc\d+$') { $releaseFlags += '--prerelease' }
-          gh release create "${{ github.ref_name }}" $assets `
-            --title "Zapret Keenetic Converter ${{ github.ref_name }}" `
-            --generate-notes @releaseFlags
+          if ($tag -match 'rc\d+$') {
+            $releaseFlags += '--prerelease'
+          } else {
+            $releaseFlags += '--latest'
+          }
+          if (Test-Path $notesPath) {
+            $releaseFlags += @('--notes-file', $notesPath)
+          } else {
+            $releaseFlags += '--generate-notes'
+          }
+          gh release create $tag $assets --title "Zapret Keenetic Converter $tag" @releaseFlags

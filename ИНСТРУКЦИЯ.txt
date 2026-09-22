@@ -35,5 +35,5 @@
    Если стало хуже, восстановите сохранённый конфиг и списки.
 
 Подробно о настройках окна: docs/GUI_RU.md
-Проверка ALT13 и порядок отката: docs/TEST_1_10_3_RU.md
+Резервная копия и откат: docs/USER_GUIDE_RU.md (раздел 16)
 Проблемы и обновления: https://github.com/Sxlenium/zapret-keenetic-converter
